@@ -144,7 +144,10 @@ def scrape_mercadolibre_api(url):
         response = requests.get(api_url, timeout=10)
         if response.status_code == 200:
             data = response.json()
-            return float(data.get('price')), ""
+            precio = data.get('price')
+            if precio is not None:
+                return float(precio)
+            return None
     except Exception as e:
         print(f"Error en API de ML: {e}")
     return None, ""
@@ -273,6 +276,28 @@ def scrape_url(url):
     except Exception as e:
         logger.error("scrape_url_failed", extra={"url": url, "error": str(e)})
         return None, ""
+
+def save_log_to_s3(resultados):
+    try:
+        now = datetime.utcnow()
+        key = f"logs/{now.strftime('%Y/%m/%d')}/run-{now.strftime('%H%M%S')}.json"
+        log = {
+            "timestamp": now.isoformat(),
+            "total_productos": len(resultados),
+            "exitosos": len([r for r in resultados if r.get("status") == "ok"]),
+            "sin_cambio": len([r for r in resultados if r.get("status") == "sin_cambio"]),
+            "errores": len([r for r in resultados if r.get("status") in ["error_scraping", "error"]]),
+            "resultados": resultados
+        }
+        s3.put_object(
+            Bucket=BUCKET_NAME,
+            Key=key,
+            Body=json.dumps(log),
+            ContentType="application/json"
+        )
+        print(f"Log guardado en S3: {key}")
+    except Exception as e:
+        print(f"Error guardando log en S3: {str(e)}")
 
 def lambda_handler(event, context):
     print("Iniciando scraper...")
