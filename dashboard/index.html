@@ -1,0 +1,189 @@
+<!DOCTYPE html>
+<html lang="es">
+
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>PriceWatch</title>
+    <link rel="stylesheet" href="styles.css" />
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js" defer></script>
+    <script src="app.js" defer></script>
+</head>
+
+<body>
+
+    <header class="header">
+        <div class="logo">
+            <div class="logo-icon">P</div>
+            <span>PriceWatch</span>
+        </div>
+        <div class="header-right">
+            <div class="status-pill">
+                <span class="status-dot"></span>
+                Sistema activo
+            </div>
+            <button class="btn-primary" id="open-add-modal">+ Agregar producto</button>
+        </div>
+    </header>
+
+    <main class="main">
+
+        <section class="metrics-grid">
+            <div class="metric-card">
+                <div class="metric-label">Productos monitoreados</div>
+                <div class="metric-value" id="m-total">—</div>
+                <div class="metric-sub">en múltiples tiendas</div>
+            </div>
+            <div class="metric-card">
+                <div class="metric-label">Con baja de precio</div>
+                <div class="metric-value green" id="m-down">—</div>
+                <div class="metric-sub">vs precio inicial</div>
+            </div>
+            <div class="metric-card">
+                <div class="metric-label">Con alza de precio</div>
+                <div class="metric-value red" id="m-up">—</div>
+                <div class="metric-sub">vs precio inicial</div>
+            </div>
+            <div class="metric-card">
+                <div class="metric-label">Mejor descuento</div>
+                <div class="metric-value blue" id="m-best">—</div>
+                <div class="metric-sub" id="m-best-name">—</div>
+            </div>
+        </section>
+
+        <div class="toolbar">
+            <div class="toolbar-left">
+                <span class="section-title">Productos</span>
+                <div class="filters" id="store-filters"></div>
+                <select id="sort-select" class="select-input">
+                    <option value="name">Ordenar: nombre</option>
+                    <option value="price-asc">Precio: menor a mayor</option>
+                    <option value="price-desc">Precio: mayor a menor</option>
+                    <option value="change-desc">Mayor variación</option>
+                </select>
+                <select id="status-filter" class="select-input">
+                    <option value="all">Todos</option>
+                    <option value="down">Bajaron de precio</option>
+                    <option value="up">Subieron de precio</option>
+                    <option value="same">Sin cambio</option>
+                </select>
+            </div>
+            <button class="btn-outline" id="refresh-btn">↻ Actualizar</button>
+        </div>
+
+        <div class="products-grid" id="products-grid">
+            <div class="loading-state">
+                <div class="spinner"></div>
+                <span>Cargando productos...</span>
+            </div>
+        </div>
+
+        <section class="chart-section" id="chart-section">
+            <div class="chart-header">
+                <div>
+                    <div class="chart-title" id="chart-title">Historial de precios</div>
+                    <div class="chart-subtitle" id="chart-subtitle">Selecciona un producto para ver su evolución</div>
+                </div>
+                <a class="btn-outline" id="chart-buy-link" href="#" target="_blank" style="display:none">Ir a comprar
+                    →</a>
+            </div>
+            <div class="chart-wrap">
+                <canvas id="price-chart"></canvas>
+            </div>
+        </section>
+
+    </main>
+
+    <!-- Modal agregar producto -->
+    <div class="modal-overlay" id="add-modal" style="display:none">
+        <div class="modal">
+            <div class="modal-header">
+                <h2 class="modal-title">Agregar producto</h2>
+                <button class="modal-close" id="close-modal">✕</button>
+            </div>
+
+            <div class="form-group">
+                <label class="form-label">URL del producto</label>
+                <div class="url-row">
+                    <input type="url" id="input-url" class="form-input"
+                        placeholder="https://www.amazon.com.mx/dp/..." />
+                    <button class="btn-primary" id="check-url-btn">Verificar</button>
+                </div>
+                <div id="url-feedback" class="url-feedback"></div>
+            </div>
+
+            <div id="product-preview" class="product-preview" style="display:none">
+                <img id="preview-img" src="" alt="" class="preview-img" />
+                <div class="preview-info">
+                    <div class="preview-title" id="preview-title"></div>
+                    <div class="preview-ok">✓ URL válida y precio detectable</div>
+                </div>
+            </div>
+
+            <div class="form-row">
+                <div class="form-group">
+                    <label class="form-label">Nombre del producto</label>
+                    <input type="text" id="input-name" class="form-input" placeholder="Ej: Sony WH-1000XM5" />
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Tienda</label>
+                    <input type="text" id="input-store" class="form-input" placeholder="Ej: Amazon MX" />
+                </div>
+            </div>
+
+            <div class="form-row">
+                <div class="form-group">
+                    <label class="form-label">Precio actual ($)</label>
+                    <input type="number" id="input-price" class="form-input" placeholder="0.00" step="0.01" />
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Umbral de alerta (%)</label>
+                    <input type="number" id="input-threshold" class="form-input" placeholder="5" value="5" min="1"
+                        max="50" />
+                </div>
+                <div class="form-group">
+                    <label class="form-label">URL de imagen (opcional)</label>
+                    <input type="url" id="input-image" class="form-input" placeholder="https://..." />
+                </div>
+            </div>
+
+            <div class="modal-footer">
+                <button class="btn-outline" id="cancel-modal">Cancelar</button>
+                <button class="btn-primary" id="save-product-btn">Guardar producto</button>
+            </div>
+        </div>
+    </div>
+    <!-- Modal editar producto -->
+    <div class="modal-overlay" id="edit-modal" style="display:none">
+        <div class="modal">
+            <div class="modal-header">
+                <h2 class="modal-title">Editar producto</h2>
+                <button class="modal-close" id="close-edit-modal">✕</button>
+            </div>
+            <div class="form-group">
+                <label class="form-label">Nombre del producto</label>
+                <input type="text" id="edit-name" class="form-input" />
+            </div>
+            <div class="form-row">
+                <div class="form-group">
+                    <label class="form-label">Umbral de alerta (%)</label>
+                    <input type="number" id="edit-threshold" class="form-input" min="1" max="50" />
+                </div>
+                <div class="form-group">
+                    <label class="form-label">URL de imagen (opcional)</label>
+                    <input type="url" id="edit-image" class="form-input" placeholder="https://..." />
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn-outline" id="cancel-edit-modal">Cancelar</button>
+                <button class="btn-primary" id="save-edit-btn">Guardar cambios</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Toast -->
+    <div class="toast" id="toast"></div>
+
+</body>
+
+</html>
