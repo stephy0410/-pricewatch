@@ -12,11 +12,12 @@ EventBridge (every 30 min)
 ├── DynamoDB        — price storage & history
 ├── SNS             — email alerts on threshold breach
 └── S3              — structured execution logs (JSON)
+
 User Request
 └── API Gateway (REST)
 └── Lambda API (Docker + boto3)
 └── DynamoDB
-Static Dashboard (S3 + public hosting)
+  Static Dashboard (S3 + public hosting)
 └── API Gateway → Lambda API → DynamoDB
 
 ## Tech Stack
