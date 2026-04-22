@@ -1,70 +1,89 @@
-# PriceWatch 🔍
+# PriceWatch — Real-Time Price Monitoring System
 
-Sistema serverless de monitoreo de precios en tiempo real, construido sobre AWS como proyecto final del Diplomado Cloud Computing — ITESO / Intel Partnership 2026.
+A production-grade, fully serverless price monitoring platform built on AWS. Automatically tracks product prices across major retailers, detects price changes, and delivers real-time alerts — all without managing a single server.
 
-## Arquitectura
-EventBridge (cron 30min)
-→ Lambda Scraper → DynamoDB
-→ SNS (alertas por email)
-→ S3 (logs JSON)
-Usuario → API Gateway → Lambda API → DynamoDB
-Dashboard (S3 static hosting) → API Gateway
+**Live Dashboard:** http://pricewatch-dashboard.s3-website.us-east-2.amazonaws.com
 
-## Servicios AWS utilizados
+---
 
-- **DynamoDB** — almacenamiento de productos e historial de precios
-- **Lambda** — scraper de precios y API REST
-- **API Gateway** — exposición pública de endpoints REST
-- **EventBridge** — ejecución automática del scraper cada 30 minutos
-- **SNS** — alertas por email cuando un precio supera el umbral configurado
-- **S3** — hosting del dashboard y almacenamiento de logs
-- **ECR** — registro de imágenes Docker para las funciones Lambda
+## Architecture
+EventBridge (every 30 min)
+└── Lambda Scraper (Docker + curl_cffi)
+├── DynamoDB        — price storage & history
+├── SNS             — email alerts on threshold breach
+└── S3              — structured execution logs (JSON)
+User Request
+└── API Gateway (REST)
+└── Lambda API (Docker + boto3)
+└── DynamoDB
+Static Dashboard (S3 + public hosting)
+└── API Gateway → Lambda API → DynamoDB
 
-## Estructura del proyecto
-/scraper      Lambda que extrae precios de tiendas en línea
-/api          Lambda que expone los datos via REST
-/dashboard    Frontend estático (HTML, CSS, JS)
+## Tech Stack
 
-## Tiendas soportadas
+| Layer | Technology |
+|-------|-----------|
+| Compute | AWS Lambda (Docker/ECR) |
+| Storage | Amazon DynamoDB |
+| API | Amazon API Gateway (REST) |
+| Scheduling | Amazon EventBridge |
+| Alerts | Amazon SNS |
+| Hosting | Amazon S3 (static website) |
+| Logs | Amazon S3 (JSON) |
+| Scraping | Python, curl_cffi, BeautifulSoup |
+| Frontend | Vanilla JS, CSS3, Chart.js |
 
-- Amazon MX
-- Mercado Libre MX (via API oficial)
-- Farmacias Guadalajara
-- BuscaLibre MX
-- Nike MX
-- Books to Scrape
+## Key Features
 
-## Dashboard
+- **Automatic price tracking** — EventBridge triggers the scraper every 30 minutes across all monitored products
+- **Smart scraping** — uses `curl_cffi` with Chrome impersonation to bypass bot detection; Mercado Libre is queried via its official API
+- **Price history** — every price change is recorded in DynamoDB with timestamp, enabling full trend visualization
+- **Threshold alerts** — SNS sends email notifications when a product's price change exceeds the user-defined percentage threshold
+- **REST API** — full CRUD API built on Lambda + API Gateway with CORS support
+- **Interactive dashboard** — real-time charts, store filtering, add/edit/delete products, URL validation with automatic price extraction
+- **Execution logs** — every scraper run produces a structured JSON log stored in S3
 
-URL pública: http://pricewatch-dashboard.s3-website.us-east-2.amazonaws.com
+## API Reference
 
-Funcionalidades:
-- Visualización de productos con imagen, precio actual y variación
-- Gráfica de historial de precios por producto
-- Filtros por tienda y estado (bajó / subió / sin cambio)
-- Agregar, editar y eliminar productos
-- Verificación automática de URL y extracción de precio
-- Notificaciones del navegador cuando un precio cambia
-
-## API Endpoints
-
-| Método | Endpoint | Descripción |
+| Method | Endpoint | Description |
 |--------|----------|-------------|
-| GET | /products | Lista todos los productos |
-| POST | /products | Agrega un producto nuevo |
-| DELETE | /products/{id} | Elimina un producto |
-| PATCH | /products/{id} | Edita nombre, umbral o imagen |
-| GET | /products/{id}/history | Historial de precios |
-| POST | /check-url | Verifica si una URL es scrapeable |
+| `GET` | `/products` | List all monitored products |
+| `POST` | `/products` | Add a new product |
+| `DELETE` | `/products/{id}` | Remove a product |
+| `PATCH` | `/products/{id}` | Update name, threshold, or image |
+| `GET` | `/products/{id}/history` | Full price history for a product |
+| `POST` | `/check-url` | Validate URL and extract current price |
 
-## Equipo
+## Project Structure
+/scraper        Price extraction Lambda — Docker image deployed to ECR
+/api            REST API Lambda — Docker image deployed to ECR
+/dashboard      Static frontend — HTML, CSS, Vanilla JS
 
-- **Stephanie Borrego** — DynamoDB, Lambda API, API Gateway, Dashboard
-- **Alejandra** — Lambda Scraper, Logs en S3
-- **Hannah Chenoa** — EventBridge, SNS, Integración end-to-end
+## Tested supported Retailers
 
-## Limitaciones conocidas
+| Retailer | Method |
+|----------|--------|
+| Amazon MX | HTML scraping (curl_cffi + Chrome impersonation) |
+| Mercado Libre MX | Official REST API |
+| Farmacias Guadalajara | HTML scraping |
+| BuscaLibre MX | HTML scraping |
+| Nike MX | HTML scraping |
+| Books to Scrape | HTML scraping |
 
-- Amazon bloquea imágenes via CORS — se agregan manualmente
-- Liverpool y Walmart bloquean scraping completamente
-- Sin autenticación de usuarios — mejora futura con Amazon Cognito
+## Team
+
+| Member | Responsibilities |
+|--------|----------------|
+| Stephanie Borrego | DynamoDB design, Lambda API, API Gateway, S3 dashboard, Lambda Scraper |
+| Alejandra | Lambda Scraper, S3 execution logs |
+| Hannah Chenoa | EventBridge scheduling, SNS alerts, end-to-end integration |
+
+## Known Limitations & Future Work
+
+- **Authentication** — currently single-tenant; multi-user support planned via Amazon Cognito
+- **Image loading** — Some product images blocked by CORS; added manually or via Google Images
+- **Retailer coverage** — Liverpool and Walmart actively block scraping; proxy rotation or browser automation (Playwright) would be required
+
+---
+
+*Built for Cloud Computing Course— ITESO *
