@@ -21,6 +21,9 @@ RATE_LIMIT_SECONDS = 3
 USER_AGENTS = [
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
     "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+    "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36",
+    "Mozilla/5.0 (iPhone; CPU iPhone OS 16_0 like Mac OS X) AppleWebKit/605.1.15",
+    "Mozilla/5.0 (Linux; Android 13; SM-G998B) AppleWebKit/537.36",
 ]
 
 def get_random_headers():
@@ -144,10 +147,7 @@ def scrape_mercadolibre_api(url):
         response = requests.get(api_url, timeout=10)
         if response.status_code == 200:
             data = response.json()
-            precio = data.get('price')
-            if precio is not None:
-                return float(precio)
-            return None
+            return float(data.get('price')), ""
     except Exception as e:
         print(f"Error en API de ML: {e}")
     return None, ""
@@ -156,6 +156,31 @@ def scrape_books_toscrape(soup, url):
     price = soup.select_one('.price_color')
     if price: return extract_price(price.text)
     return None
+
+def scrape_farmacias_guadalajara(soup, url):
+    """Para Farmacias Guadalajara SIEMPRE usamos la API (requiere JavaScript)"""
+    print("🔁 Farmacias Guadalajara - usando API externa")
+    
+    try:
+        # Llamar DIRECTAMENTE a la API
+        response = requests.post(
+            "https://ameo7idb0b.execute-api.us-east-2.amazonaws.com/prod/check-url",
+            json={"url": url},
+            headers={"Content-Type": "application/json"},
+            timeout=30
+        )
+        data = response.json()
+        
+        if data.get('scrapeable'):
+            price = data.get('price')
+            print(f" Precio vía API: ${price}")
+            return price
+        else:
+            print(f" API no pudo scrapear: {data.get('message')}")
+            return None
+    except Exception as e:
+        print(f" Error llamando a API: {e}")
+        return None
 
 def scrape_amazon(soup, url):
     selectors = [
@@ -188,6 +213,7 @@ def scrape_amazon(soup, url):
         pass
     return extract_price(soup.get_text())
 
+
 def scrape_zara(soup, url):
     try:
         scripts = soup.find_all("script")
@@ -206,6 +232,72 @@ def scrape_zara(soup, url):
         return extract_price(meta.get("content"))
     return None
 
+def scrape_buscalibre(soup, url):
+    """Específico para BuscaLibre"""
+    try:
+        # JSON-LD primero
+        scripts = soup.find_all('script', {'type': 'application/ld+json'})
+        for script in scripts:
+            try:
+                data = json.loads(script.string)
+                if isinstance(data, list):
+                    data = data[0]
+                if data.get('@type') == 'Product':
+                    offers = data.get('offers', {})
+                    price = offers.get('price')
+                    if price:
+                        return float(price)
+            except:
+                pass
+        
+        # Selectores específicos
+        selectors = [
+            '.precio-ahora',
+            '.price-now',
+            '.final-price',
+            '[itemprop="price"]',
+            '.product-price .price',
+            '.precio'
+        ]
+        
+        for selector in selectors:
+            elem = soup.select_one(selector)
+            if elem:
+                price = extract_price(elem.text)
+                if price and price > 10:
+                    return price
+    except:
+        pass
+    return None
+def scrape_nike(soup, url):
+    """Específico para Nike.com"""
+    try:
+        # JSON-LD primero
+        scripts = soup.find_all('script', {'type': 'application/ld+json'})
+        for script in scripts:
+            try:
+                data = json.loads(script.string)
+                if isinstance(data, list):
+                    data = data[0]
+                if data.get('@type') == 'Product':
+                    offers = data.get('offers', {})
+                    if isinstance(offers, list):
+                        offers = offers[0]
+                    price = offers.get('price')
+                    if price and price > 500:  # Filtrar precios bajos
+                        return float(price)
+            except:
+                pass
+        
+        # Selector específico
+        price_elem = soup.select_one('[data-test="product-price"], .product-price, .css-b9fzfp')
+        if price_elem:
+            price = extract_price(price_elem.text)
+            if price and price > 500:
+                return price
+    except:
+        pass
+    return None
 def scrape_generic(soup, url):
     meta_selectors = ['meta[property="product:price:amount"]', 'meta[itemprop="price"]']
     for selector in meta_selectors:
@@ -226,38 +318,85 @@ def get_scraper_function(domain):
         'amazon.com.mx': scrape_amazon,
         'a.co': scrape_amazon,
         'zara.com': scrape_zara,
+        'farmaciasguadalajara.com': scrape_farmacias_guadalajara,
+        'buscalibre.com': scrape_buscalibre,
+        'fahorro.com': scrape_farmacias_guadalajara,
+        "nike.com": scrape_nike
     }
     for key, func in domain_map.items():
         if key in domain: return func
     return scrape_generic
 
+def scrape_url_via_api(url):
+    """Usa el endpoint check-url de la API (que SÍ funciona)"""
+    try:
+        response = requests.post(
+            "https://ameo7idb0b.execute-api.us-east-2.amazonaws.com/prod/check-url",
+            json={"url": url},
+            headers={"Content-Type": "application/json"},
+            timeout=30
+        )
+        data = response.json()
+        
+        if data.get('scrapeable'):
+            price = data.get('price')
+            og_image = data.get('og_image', '')
+            print(f" Precio vía API: ${price}")
+            return price, og_image
+        else:
+            print(f" API no pudo scrapear: {data.get('message')}")
+            return None, ""
+    except Exception as e:
+        print(f" Error llamando a API: {e}")
+        return None, ""
+
 def scrape_url(url):
+    """Intenta scrape directo, si falla usa la API"""
     try:
         parsed = urlparse(url)
         domain = parsed.netloc.lower()
         print(f"Scrapeando: {domain}")
+
+        js_heavy_sites = ['farmaciasguadalajara', 'fahorro']
+        if any(site in domain for site in js_heavy_sites):
+            print(f"{domain} requiere JavaScript - usando API como fuente principal")
+            return scrape_url_via_api(url)
+
+        
+        # Mercado Libre usa API (sin cambios)
         if 'mercadolibre.com' in domain:
             precio_api, _ = scrape_mercadolibre_api(url)
             if precio_api:
                 print(f"Precio encontrado vía API ML: ${precio_api}")
                 return precio_api, ""
+        
         respect_rate_limit(domain)
+        
+        headers = {
+            "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+            "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8",
+            "Accept-Language": "es-MX,es;q=0.9,en;q=0.8",
+        }
+        
         response = requests.get(
             url,
-            headers=get_random_headers(),
+            headers=headers,
             impersonate="chrome124",
             timeout=30,
             verify=False
         )
+        
         if response.status_code != 200:
-            print(f"Error HTTP {response.status_code}")
-            return None, ""
+            print(f"Error HTTP {response.status_code} - usando API como fallback")
+            return scrape_url_via_api(url)  # ← FALLBACK A API
+        
         page_text = response.text.lower()
         if any(keyword in page_text for keyword in ['access denied', 'verifica tu identidad', 'captcha']):
-            print("Bloqueado por el servidor.")
-            return None, ""
+            print("Bloqueado - usando API como fallback")
+            return scrape_url_via_api(url)  # ← FALLBACK A API
+        
         soup = BeautifulSoup(response.text, "html.parser")
-
+        
         og_image = ""
         try:
             meta_img = soup.find("meta", {"property": "og:image"})
@@ -265,43 +404,37 @@ def scrape_url(url):
                 og_image = meta_img["content"]
         except:
             pass
-
+        
         scraper_func = get_scraper_function(domain)
         price = scraper_func(soup, url)
-        if price:
-            print(f"Precio encontrado: ${price}")
-            return price, og_image
-        return None, og_image
 
+# Validar que price sea número, no tupla
+        if isinstance(price, tuple):
+            price = price[0]
+
+        if price:
+            print(f"Precio encontrado directamente: ${price}")
+            return price, og_image
+        
+        # Si no encontró precio, intentar con API
+        print("No se encontró precio directo - usando API como fallback")
+        return scrape_url_via_api(url)
+        
     except Exception as e:
         logger.error("scrape_url_failed", extra={"url": url, "error": str(e)})
-        return None, ""
-
-def save_log_to_s3(resultados):
-    try:
-        now = datetime.utcnow()
-        key = f"logs/{now.strftime('%Y/%m/%d')}/run-{now.strftime('%H%M%S')}.json"
-        log = {
-            "timestamp": now.isoformat(),
-            "total_productos": len(resultados),
-            "exitosos": len([r for r in resultados if r.get("status") == "ok"]),
-            "sin_cambio": len([r for r in resultados if r.get("status") == "sin_cambio"]),
-            "errores": len([r for r in resultados if r.get("status") in ["error_scraping", "error"]]),
-            "resultados": resultados
-        }
-        s3.put_object(
-            Bucket=BUCKET_NAME,
-            Key=key,
-            Body=json.dumps(log),
-            ContentType="application/json"
-        )
-        print(f"Log guardado en S3: {key}")
-    except Exception as e:
-        print(f"Error guardando log en S3: {str(e)}")
+        # Último intento con API
+        return scrape_url_via_api(url)
 
 def lambda_handler(event, context):
     print("Iniciando scraper...")
     productos = get_products_from_dynamodb()
+    # 🔍 DIAGNÓSTICO: Ver qué scraper usa cada URL
+    for producto in productos:
+        url = producto["url"]
+        parsed = urlparse(url)
+        domain = parsed.netloc.lower()
+        scraper_func = get_scraper_function(domain)
+        print(f"🔍 {domain} → Usando: {scraper_func.__name__}")
     if not productos: return {"statusCode": 200, "body": json.dumps({"mensaje": "No hay productos"})}
     resultados = []
     for producto in productos:
@@ -340,7 +473,7 @@ def lambda_handler(event, context):
             "variacion": round(variacion, 2),
             "status": "ok"
         })
-        human_delay(1, 3)
+        #human_delay(1, 3)
 
     # Guardar log en S3 al finalizar todos los productos
     try:
@@ -350,6 +483,7 @@ def lambda_handler(event, context):
             "timestamp": datetime.utcnow().isoformat(),
             "total": len(resultados),
             "ok": len([r for r in resultados if r.get("status") == "ok"]),
+            "sin_cambio": len([r for r in resultados if r.get("status") == "sin_cambio"]),  # ← agregar
             "errores": len([r for r in resultados if "error" in r.get("status", "")]),
             "resultados": resultados
         }
